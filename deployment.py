@@ -1,4 +1,5 @@
-#!/bin/python3
+#!/usr/bin/env python
+
 import os
 from textwrap import dedent
 print("""
@@ -16,20 +17,27 @@ print("""
 
 prgreen = lambda string:print('\033[32m' + string + '\033[0m')
 
-MYSQL_USER = "xxx"
-MYSQL_DATABASE = "xxx"
-MYSQL_PASSWORD = "xxx"
-PROJECT = "xxx"
-PROJECT_URL = "xxxx"
+MYSQL_USER = "xxxxxxxxxxxx"
+MYSQL_DATABASE = "xxxxxxxxxxxxx"
+MYSQL_PASSWORD = "xxxxxxxxxxxxxxxx"
+PROJECT = "xxxxxx"
+GIT_REPO = "git@github.com:xxx/xxx.git"
+GIT_USERNAME = "xxxxxxxxxxxxxxxxxxxxxxx"
+GIT_PASSWORD_OR_TOKEN = "xxxxxxxxxxxxxxxxxxxxxxxxx"
+# https://USERNAME:TOKEN@github.com/OWNER/REPO.git
+PROJECT_URL = f"https://{GIT_USERNAME}:{GIT_PASSWORD_OR_TOKEN}@github.com/{GIT_REPO[GIT_REPO.find(':')+1:]}"
 PROJECT_DIRECTORY = PROJECT_URL[PROJECT_URL.rfind('/')+1:PROJECT_URL.rfind('.git')]
-DOMAIN = "xxx"
-EMAIL = "xxx"
+DOMAIN = "xxxxxxxxxxxxxxxxx.com"
+EMAIL = "xxxxxxxxxxxxxxxx.com"
 ENVIRONS = f"""
+export DB="{MYSQL_USER}"
 export DB_USER="{MYSQL_USER}"
 export DB_PASSWORD="{MYSQL_PASSWORD}"
 export DB_HOST="127.0.0.1"
 export DB_PORT="3306"
 """
+SUPERVISOR_ENVIRON = ENVIRONS.strip().replace("\n", ',').replace("export ", '')
+CLI_ENVIRON = ENVIRONS.replace('\n', ' && ')
 
 prgreen("[+] Installing necessary packages")
 os.system("sudo apt update")
@@ -45,13 +53,6 @@ with open("/home/ubuntu/.bashrc", "a") as file:
     file.write(ENVIRONS)
 os.system('bash -c "source /home/ubuntu/.bashrc"')
 
-if input("Do you want to generate a new key [yes/no] ? ").lower() == "yes":
-        prgreen("[+] Generating ssh key")
-        os.system("sudo ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' -q")
-        os.system("cat ~/.ssh/id_ed25519.pub")
-        input("copy this key to your repo. and press Enter once you done: ")
-
-
 prgreen("[+] Cloning Repository")
 os.system(f'GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=no" git clone {PROJECT_URL}')
 os.chdir("/var/www")
@@ -65,7 +66,7 @@ os.system('bash -c "source env/bin/activate && pip install -r requirements.txt"'
 
 prgreen("[+] Migrating Database and Collection static files")
 os.chdir(f'src/{PROJECT}')
-os.system('bash -c "source /home/ubuntu/.bashrc && source ../../env/bin/activate && python manage.py makemigrations && python manage.py migrate && python manage.py collectstatic --noinput"')
+os.system(f'bash -c "source ../../env/bin/activate {CLI_ENVIRON} python manage.py collectstatic --noinput && python manage.py makemigrations && python manage.py migrate"')
 
 prgreen("[+] Creating supervisor configuraton")
 with open(f"/home/ubuntu/{PROJECT}.conf", 'w') as file:
@@ -79,6 +80,7 @@ with open(f"/home/ubuntu/{PROJECT}.conf", 'w') as file:
         redirect_stderr=true
         stderr_logfile=/var/log/{PROJECT}.err.log
         stdout_logfile=/var/log/{PROJECT}.out.log
+        environment={SUPERVISOR_ENVIRON}
     """)[1:])
 os.system(f"sudo mv /home/ubuntu/{PROJECT}.conf /etc/supervisor/conf.d/")
 os.system("sudo supervisorctl reread")
